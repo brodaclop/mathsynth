@@ -1,0 +1,47 @@
+<html>
+  <head>
+    <script src="synth.js"></script>
+    <script>
+      let synth;
+
+      function init() {
+        synth = new Synth();
+      }
+
+      function start(source) {
+        console.log("start");
+        let params = {};
+        document.querySelectorAll("#"+source+" input").forEach(e => params[e.name] = e.type === 'checkbox' ? e.checked : e.value);
+        console.log("About to play ",source,params);
+        synth.play(source,params);
+      }
+
+      function stop() {
+        synth.stop();
+      }
+    </script>
+  </head>
+  <body onload="init()">
+    <p id="ModuloPolynomial">
+        <b>ModuloPolynomial</b>
+        Modulo: <input type="text" name="mod" value="739"/>
+        Coefficients: <input type="text" name="coeffs" value="1,3,0,1"/>
+        Length: <input type="text" name="length" value="200"/>
+        Iterate: <input type="checkbox" name="iterate"/>
+        <button onclick="start('ModuloPolynomial')">start</button>
+    </p>
+    <p id="Collatz">
+        <b>Collatz</b>
+        Start: <input type="text" name="start" value="1739"/>
+        <button onclick="start('Collatz')">start</button>
+    </p>
+    <p id="ModuloFibonacci">
+        <b>ModuloFibonacci</b>
+        Modulo: <input type="text" name="mod" value="10"/>
+        Length: <input type="text" name="length" value="1000"/>
+        <button onclick="start('ModuloFibonacci')">start</button>
+    </p>
+
+    <button onclick="stop()">stop</button>
+  </body>
+</html>
