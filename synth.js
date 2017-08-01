@@ -1,7 +1,6 @@
 
 function Synth() {
   let audio = new AudioContext();
-  let scale = new Scale();
   //let envelope = new ADSREnvelope(0.2,0.06,0.8,0.7)
   let envelope = new ADSREnvelope(0.01,0.06,0.6,0.4);
 //  let instr = new PatchFactory(envelope, 'sine', [10,3,5,2,1,0.4,0.1]);
@@ -23,12 +22,13 @@ function Synth() {
   //Fibonacci: {mod:10, length:1000}
   this.play = function(source, params) {
     console.log("Playing ",source,params);
+    let scale = createScale(params.scale_type, params.scale_shift);
     let time = audio.currentTime+timeStep*2;
-    let range = 10;
+    let range = params.range;
     let sourceConstructor = sources[source];
     let notes = new (sourceConstructor.bind.apply(sourceConstructor, arguments));
     for (let n = notes.next(); !n.done; n = notes.next()) {
-        queue.enqueue(time, n.value % range);
+        queue.enqueue(time, scale.note(n.value % range));
         time += 0.25;
     }
   }
@@ -36,7 +36,7 @@ function Synth() {
   function playFromQueue() {
     let endTime = audio.currentTime + timeStep*1.2;
     for (let note = queue.dequeue(endTime); !!note ; note = queue.dequeue(endTime)) {
-      channel.play(note.time, scale.note(note.event), 1);
+      channel.play(note.time, note.event, 1);
     }
   }
 
@@ -65,9 +65,11 @@ function Synth() {
 
   function ModuloPolynomial(params) {
     let mod = params.mod;
-    let coeffs = Array.isArray(params.coeffs) ? params.coeffs : params.coeffs.split(",");
+    let coeffs = Array.isArray(params.coeffs) ? params.coeffs : params.coeffs.split(",").map(c => ~~c);
     let left = params.length;
     let iterate = !!params.iterate;
+
+    console.log("ModuloPolynomial: ",mod,coeffs,left,iterate);
 
     let current = 0;
 
@@ -125,24 +127,38 @@ function Synth() {
     }
   }
 
+  function createScale(type,shift) {
+    const PENTATONIC = [2,2,3,2,3];
+    const MAJOR = [2,2,1,2,2,2,1];
 
-  function Scale() {
-    let A = 440;
-    //let scale = [0, 2, 4, 5, 7, 9, 11]; //bog standard major
-    let scale = [0,3,5,7,10]; //minor pentatonic
+    let deltas = Array.from(type == "MAJOR" ? MAJOR : PENTATONIC);
+    let len = deltas.length;
+    deltas = deltas.concat(deltas).slice(shift,shift+len);
+    let scale = [0];
+    for (let i = 0; i < len - 1;i++) {
+      scale.push(scale[i]+deltas[i]);
+    }
 
-    this.note = function(key) {
-      let octave = Math.floor(key/scale.length);
-      let n = key - octave * scale.length;
-      return Math.pow(2,octave+scale[n]/12)*A;
+    return new Scale(scale);
+
+    function Scale(scale) {
+      let A = 440;
+      console.log("Scale: ",scale);
+
+      this.note = function(key) {
+        let octave = Math.floor(key/scale.length);
+        let n = key - octave * scale.length;
+        return Math.pow(2,octave+scale[n]/12)*A;
+      }
     }
   }
+
 
   function PatchFactory(envelope,waveform,harmonics) {
     let sum = 0;
     harmonics.forEach(h => sum += h);
     let coeffs = harmonics.map(h => h/sum);
-    console.log(harmonics,coeffs);
+    console.log("PatchFactory: "+harmonics,coeffs);
 
 
     this.create = function() {
