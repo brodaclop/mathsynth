@@ -5,7 +5,9 @@ function Synth() {
   let envelope = new ADSREnvelope(0.01,0.06,0.6,0.4);
 //  let instr = new PatchFactory(envelope, 'sine', [10,3,5,2,1,0.4,0.1]);
   let instr = new PatchFactory(envelope, 'triangle', [10,7,1,4,8,1,0.1,0.8]);
+//  let instr = new PatchFactory(envelope, 'sine', [1]);
   let channel = new Channel(instr,[new Flanger('sine', 0.20, 0.007, 0.5, 0.2)]);
+//  let channel = new Channel(instr);
   let queue = new TimedEventQueue();
   let timeStep = 0.05;
 
@@ -36,7 +38,8 @@ function Synth() {
   function playFromQueue() {
     let endTime = audio.currentTime + timeStep*1.2;
     for (let note = queue.dequeue(endTime); !!note ; note = queue.dequeue(endTime)) {
-      channel.play(note.time, note.event, 1);
+//      channel.play(note.time, note.event,5,{vibrato_freq: 0.3,vibrato_depth:100});
+      channel.play(note.time, note.event,1);
     }
   }
 
@@ -160,52 +163,35 @@ function Synth() {
     let coeffs = harmonics.map(h => h/sum);
     console.log("PatchFactory: "+harmonics,coeffs);
 
-
     this.create = function() {
         let master = audio.createGain();
         master.gain.value = 1;
-        let oscillators = coeffs.map(c => {
-          let o = audio.createOscillator();
+        let frequency_source = audio.createConstantSource();
+
+        let oscillators = coeffs.map((c,i) => {
+          let oscillator = audio.createOscillator();
           let gain = audio.createGain();
+          let frequency_gain = audio.createGain();
+          frequency_gain.gain.value = i+1;
           gain.gain.value = c;
-          o.type = waveform;
-          o.connect(gain);
+          oscillator.type = waveform;
+          oscillator.frequency.value = 0;
+
+          frequency_source.connect(frequency_gain);
+          frequency_gain.connect(oscillator.frequency);
+          oscillator.connect(gain);
           gain.connect(master);
-          return o;
+          return oscillator;
         });
 
         return {
-          freq : function(freq,time) {
-            for (let i = 0; i < oscillators.length; i++) {
-                oscillators[i].frequency.setValueAtTime(freq*(i+1), time);
-            }
-          },
-          ramp : function(freq,time) {
-            for (let i = 0; i < oscillators.length; i++) {
-                oscillators[i].frequency.exponentialRampToValueAtTime(freq*(i+1), time);
-            }
-          },
+          frequency : frequency_source.offset,
+          volume : master.gain,
           connect : master.connect.bind(master),
-          start : function(when) {oscillators.forEach(o => o.start(when));},
-          stop : function(when) {oscillators.forEach(o => o.stop(when));},
+          start : function(when) {frequency_source.start(when); oscillators.forEach(o => o.start(when));},
+          stop : function(when) {frequency_source.stop(when); oscillators.forEach(o => o.stop(when));},
           envelope : envelope
         }
-    }
-  }
-
-  function Vibrato(shape, freq, depth) {
-    this.apply = function() {
-      let gain = audio.createGain();
-      let modulator = audio.createOscillator();
-      modulator.type = shape;
-      modulator.frequency.value = freq;
-      gain.gain.value = depth;
-      modulator.connect(gain);
-      modulator.start();
-      return {
-        attachInput : function(input) {gain.connect(input.frequency);},
-        output : gain
-      }
     }
   }
 
@@ -262,15 +248,26 @@ function Synth() {
       }
     }
 
-    this.play = function(start,freq,len) {
+    this.play = function(start,freq,len,options) {
       let note = patch.create();
       let master = audio.createGain();
       note.connect(master);
       output.attachInput(master);
-      note.freq(freq,start);
+      note.frequency.setValueAtTime(freq,start);
       note.start(start);
+      let vibrato_osc = audio.createOscillator();
+      if (!!options && !!options.vibrato_depth && !!options.vibrato_freq) {
+        let vibrato_gain = audio.createGain();
+        vibrato_osc.connect(vibrato_gain);
+        vibrato_gain.connect(note.frequency);
+        vibrato_osc.frequency = options.vibrato_freq;
+        vibrato_osc.type = 'sine';
+        vibrato_gain.gain.value = options.vibrato_depth;
+        vibrato_osc.start(start);
+      }
       let end = note.envelope.play(master.gain, start, len);
       note.stop(end);
+      vibrato_osc.stop(end);
     }
   }
 
